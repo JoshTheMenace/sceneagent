@@ -30,8 +30,14 @@ good as Sakura Crossing":
 2. **Contract** — `scene-contract.json`: arrival camera, metre-scale footprint,
    landmarks, four route beats, palette roles, lighting logic, story clues, one
    interaction, budgets, and five named review cameras *each with a `subject`*.
-   Validate with `scripts/validate_scene_contract.py`; revise the contract
-   rather than patching implementation around a bad premise.
+   **Every route beat is also a gated camera** — a beat is a view a player
+   stands in, and the route's *ending* beat is the most-shipped blank-wall
+   failure in this pipeline's history: both measured builds plateaued at
+   ~0.775 with an uncomposed closing look-back. If the contract promises "the
+   look back from X", that frame carries a `subject` and passes the same
+   legibility gate as the heroes. Validate with
+   `scripts/validate_scene_contract.py`; revise the contract rather than
+   patching implementation around a bad premise.
 3. **Blockout** — ground, route, boundaries, major masses, colliders. The
    route must be walkable before any detail exists.
 4. **Compose** — from player eye height: foreground scale, a partially hidden
