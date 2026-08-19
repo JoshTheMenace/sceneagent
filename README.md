@@ -11,6 +11,18 @@ route, story dressing, one interaction, verified cameras, and zero floating or
 interpenetrating geometry — scored 0.777 by an independent reviewer against a
 0.78 acceptance bar on its first outing (every prior baseline scored 0.58–0.69).
 
+## What one prompt produces
+
+Every frame below is from a single run of this pipeline on the one-line prompt
+above — no human edits, no external assets, everything procedural.
+
+![Context view: a terraced hamlet climbing to its chapel at golden hour](docs/images/context.jpg)
+
+| | |
+|---|---|
+| ![Arrival: the stone bridge and gatehouse](docs/images/arrival.jpg) | ![The lane: stepped street to the campanile](docs/images/lane.jpg) |
+| ![The smithy interaction: pumping the bellows flares the forge](docs/images/detail-flare.jpg) | ![Free-roam view from the meadow — the spatial audit keeps off-route views clean too](docs/images/meadow-up.jpg) |
+
 ## What's inside
 
 ```
