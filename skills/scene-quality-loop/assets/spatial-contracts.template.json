@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "scene": "replace-me",
+  "policy": "fail-closed",
+  "expected_bodies": ["hero-object"],
+  "classes": {
+    "hero-object": {
+      "tags": ["solid"],
+      "body": { "kind": "obb", "center": [0, 0], "size": [1, 1], "vertical": { "bottom": 0, "top": 1 } },
+      "support": { "surface": "ground", "tolerance_m": 0.08, "points": [[0, 0, 0]] },
+      "avoid": [{ "tags": ["structure"], "clearance_m": 0.1 }],
+      "sockets": []
+    }
+  },
+  "acceptance": { "unknown": 0, "missing": 0, "violations": 0 }
+}

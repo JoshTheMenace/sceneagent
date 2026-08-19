@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scene Quality Loop"
+  short_description: "Build and visually refine stylized Three.js places"
+  default_prompt: "Use $scene-quality-loop to build and refine a polished stylized Three.js environment."

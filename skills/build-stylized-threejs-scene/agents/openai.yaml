@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Stylized Three.js Scene"
+  short_description: "Build atmospheric procedural Three.js vignettes"
+  default_prompt: "Use $build-stylized-threejs-scene to create a small, polished, explorable Three.js vignette."

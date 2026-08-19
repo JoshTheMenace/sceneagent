@@ -1,0 +1,38 @@
+{
+  "scene": "rain-cleared-tram-stop",
+  "skill_version": "0.1.0",
+  "artifacts_opened": ["arrival.png", "context.png", "detail.png", "reverse.png"],
+  "gates": {
+    "build": true,
+    "artifacts": true,
+    "multi_view": true,
+    "traversal": true,
+    "runtime": true,
+    "asset_policy": true,
+    "accessibility": true,
+    "performance": true,
+    "provenance": true
+  },
+  "scores": {
+    "composition": 0.82,
+    "sense_of_place": 0.80,
+    "art_direction": 0.84,
+    "exploration_story": 0.76,
+    "runtime_traversal": 0.88,
+    "maintainability": 0.83,
+    "performance": 0.86
+  },
+  "evidence": {
+    "composition": "Arrival has foreground scale, a clear route, and a landmark reveal.",
+    "sense_of_place": "Wet rails, a closed kiosk, and the last timetable imply a recent departure.",
+    "art_direction": "Cool rain light and one warm practical preserve the palette hierarchy.",
+    "exploration_story": "The route moves from shelter to platform reveal and ends on the empty track.",
+    "runtime_traversal": "All route beats were walked; collision, pause, resize, and interaction remained stable.",
+    "maintainability": "Builders share named materials, seeded placement, and explicit ownership.",
+    "performance": "Measured renderer statistics and frame timing remain within the declared budget."
+  },
+  "highest_impact_defect": "The reverse route loses some palette hierarchy.",
+  "decision": "continue",
+  "confidence": 0.82,
+  "limitations": []
+}

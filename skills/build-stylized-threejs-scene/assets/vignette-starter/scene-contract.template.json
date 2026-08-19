@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "title": "Replace with the place name",
+  "promise": "Describe the feeling, place, and discovery in one specific sentence.",
+  "experience_seconds": 60,
+  "footprint_m": { "width": 32, "depth": 28, "height": 12 },
+  "arrival_view": {
+    "position": [0, 1.62, 10],
+    "target": [0, 2, 0],
+    "fov": 48,
+    "composition_intent": "Name the foreground anchor, route, landmark, and background closure."
+  },
+  "art_direction": {
+    "style": "Define an operational stylized geometry and shading language.",
+    "palette_roles": {
+      "sky": "#dbe5ef",
+      "ground": "#87947d",
+      "primary": "#d8c9b4",
+      "secondary": "#64756f",
+      "ink": "#353746",
+      "accent": "#d66f62"
+    },
+    "lighting_logic": "Describe key direction, fill temperature, practical lights, and atmosphere.",
+    "silhouette_rules": ["Keep the landmark distinct from the sky", "Preserve route gaps"],
+    "forbidden_drift": ["No unapproved external assets", "No uniform prop scatter"]
+  },
+  "landmarks": [
+    { "name": "threshold", "purpose": "Invite movement from arrival" },
+    { "name": "hero-place", "purpose": "Deliver the central reveal" },
+    { "name": "return-marker", "purpose": "Orient the reverse route" }
+  ],
+  "route": {
+    "start": "arrival",
+    "beats": ["invitation", "compression", "reveal"],
+    "end": "afterimage or meaningful return view"
+  },
+  "story_details": {
+    "macro": ["One place-scale condition or recent event"],
+    "meso": ["One cluster showing use, maintenance, or habitation"],
+    "micro": ["One close detail that rewards inspection"]
+  },
+  "interactions": [
+    { "target": "lantern", "verb": "light", "response": "changes local light", "meaning": "reveals the place is still tended" }
+  ],
+  "constraints": {
+    "asset_policy": "Code-native procedural geometry and generated textures only",
+    "performance": { "target_fps": 60, "minimum_fps": 30, "max_pixel_ratio": 2 },
+    "runtime": { "browser": "modern desktop", "input": "keyboard and pointer lock" }
+  },
+  "review_cameras": [
+    { "name": "arrival", "position": [0, 1.62, 10], "target": [0, 2, 0], "subject": "Name the Object3D this camera exists to show" },
+    { "name": "context", "position": [14, 11, 16], "target": [0, 1, 0], "subject": "Name the Object3D this camera exists to show" },
+    { "name": "detail", "position": [1.2, 1.6, 1.0], "target": [3.4, 0.7, -2], "subject": "Name the Object3D this camera exists to show" },
+    { "name": "reverse", "position": [0, 1.62, -13], "target": [0, 2, 3], "subject": "Name the Object3D this camera exists to show" }
+  ],
+  "success_criteria": [
+    "The arrival view reads at thumbnail size.",
+    "The route produces at least three distinct spatial beats.",
+    "Every story detail has a plausible owner, use, or recent cause."
+  ]
+}

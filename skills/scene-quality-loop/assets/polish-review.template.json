@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "scene": "replace-scene-id",
+  "source_identity": "replace-with-hash-or-revision",
+  "artifacts_opened": [],
+  "gates": {
+    "assembly": false,
+    "grounding": false,
+    "function": false,
+    "detail": false,
+    "coverage": false
+  },
+  "scores": {
+    "assembly_correctness": 0,
+    "grounding_contact": 0,
+    "functional_plausibility": 0,
+    "detail_completeness": 0,
+    "inspection_coverage": 0
+  },
+  "defects": [],
+  "decision": "revise-code",
+  "limitations": []
+}

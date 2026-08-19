@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "scene": "replace-scene-id",
+  "items": [
+    {
+      "id": "replace-detail-id",
+      "name": "Replace detail name",
+      "scale": "meso",
+      "importance": "hero",
+      "implementation": "Replace with real geometry or material ownership",
+      "inspection_camera_ids": ["replace-camera-id"],
+      "status": "planned"
+    }
+  ]
+}

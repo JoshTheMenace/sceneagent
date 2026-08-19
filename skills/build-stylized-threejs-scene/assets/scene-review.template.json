@@ -1,0 +1,43 @@
+{
+  "scene": "replace-with-scene-id",
+  "skill_version": "replace-with-skill-revision",
+  "artifacts_opened": [
+    "arrival.png",
+    "context.png",
+    "detail.png",
+    "reverse.png"
+  ],
+  "gates": {
+    "build": false,
+    "artifacts": false,
+    "multi_view": false,
+    "traversal": false,
+    "runtime": false,
+    "asset_policy": false,
+    "accessibility": false,
+    "performance": false,
+    "provenance": false
+  },
+  "scores": {
+    "composition": 0,
+    "sense_of_place": 0,
+    "art_direction": 0,
+    "exploration_story": 0,
+    "runtime_traversal": 0,
+    "maintainability": 0,
+    "performance": 0
+  },
+  "evidence": {
+    "composition": "Replace with observations from the arrival and context views.",
+    "sense_of_place": "Replace with specific environmental evidence.",
+    "art_direction": "Replace with palette, lighting, material, and silhouette evidence.",
+    "exploration_story": "Replace with route, reveal, interaction, and reverse-view evidence.",
+    "runtime_traversal": "Replace with control, collision, route, and lifecycle evidence.",
+    "maintainability": "Replace with source structure, determinism, and provenance evidence.",
+    "performance": "Replace with measured frame and renderer statistics."
+  },
+  "highest_impact_defect": "Replace with the most important remaining weakness.",
+  "decision": "revise-code",
+  "confidence": 0,
+  "limitations": []
+}

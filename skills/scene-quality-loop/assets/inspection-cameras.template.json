@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "scene": "replace-scene-id",
+  "cameras": [
+    {
+      "id": "replace-camera-id",
+      "target_id": "replace-detail-or-assembly-id",
+      "kind": "orbit",
+      "position": [4, 2, 4],
+      "target": [0, 1, 0],
+      "fov": 45
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "scene": "replace-scene-id",
+  "assemblies": [
+    {
+      "id": "replace-assembly-id",
+      "root": "replace-root-name",
+      "components": ["component-a", "component-b", "component-c"],
+      "support": "Describe what physically carries this assembly",
+      "anchors": [
+        { "id": "anchor-a", "owner": "component-a", "position": [0, 0, 0] },
+        { "id": "anchor-b", "owner": "component-b", "position": [0, 0, 0] }
+      ],
+      "relationships": [
+        { "type": "attached", "from": "anchor-a", "to": "anchor-b", "tolerance_m": 0.03 }
+      ]
+    }
+  ]
+}
