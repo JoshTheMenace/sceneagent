@@ -5,23 +5,31 @@ one-line prompt — with the quality machinery that makes the output trustworthy
 machine-checked gates, a screenshot-driven repair loop, and an independent
 review protocol.
 
-Give an agent the prompt *"Create a medieval mountain village scene for a 3D
-game"* and this pipeline produces a coherent cel-shaded place with a walkable
-route, story dressing, one interaction, verified cameras, and zero floating or
-interpenetrating geometry — scored 0.777 by an independent reviewer against a
-0.78 acceptance bar on its first outing (every prior baseline scored 0.58–0.69).
+Two full runs, two different builder models, independently scored against a
+0.78 acceptance bar (prior baselines: 0.58–0.69): *"Create a medieval mountain
+village scene for a 3D game"* reached **0.777**, and *"Create a Tokyo scene"*
+reached **0.801 — a clear pass** — each a coherent cel-shaded place with a
+walkable route, story dressing, an interaction, gated cameras, and zero
+floating or interpenetrating geometry.
 
 ## What one prompt produces
 
-Every frame below is from a single run of this pipeline on the one-line prompt
-above — no human edits, no external assets, everything procedural.
+Every frame below is agent output from those one-line prompts — no human
+edits, no external assets, everything procedural.
 
-![Context view: a terraced hamlet climbing to its chapel at golden hour](docs/images/context.jpg)
+![Yoimachi Yokocho: a dead-end Tokyo drinking alley at dusk](docs/images/tokyo-arrival.jpg)
+
+| | |
+|---|---|
+| ![The lit closing look-back down the alley](docs/images/tokyo-lookback.jpg) | ![Medieval village context: a terraced hamlet climbing to its chapel](docs/images/context.jpg) |
 
 | | |
 |---|---|
 | ![Arrival: the stone bridge and gatehouse](docs/images/arrival.jpg) | ![The lane: stepped street to the campanile](docs/images/lane.jpg) |
 | ![The smithy interaction: pumping the bellows flares the forge](docs/images/detail-flare.jpg) | ![Free-roam view from the meadow — the spatial audit keeps off-route views clean too](docs/images/meadow-up.jpg) |
+
+Full run histories with scores: [`docs/evidence/ferrun-hollow.md`](docs/evidence/ferrun-hollow.md)
+and [`docs/evidence/yoimachi-yokocho.md`](docs/evidence/yoimachi-yokocho.md).
 
 ## What's inside
 
