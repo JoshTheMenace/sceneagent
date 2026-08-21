@@ -6,7 +6,14 @@ description: Build or substantially improve small, polished, explorable, stylize
 # Build a stylized Three.js scene
 
 Create one excellent place. Optimize for authored composition, atmosphere, and
-coherence — not object count. This entry is deliberately compact: the measured
+coherence — not object count.
+
+**Scope check first.** If the brief is bigger than one agent can hold — more
+than ~10 buildings, more than one narrative zone, the word "city", "town", or
+"world" — read `references/city-scale.md` and run the decomposed pipeline it
+describes (city plan → shared kit → parallel district builds → seam-gated
+integration) instead of trying to build it all in one context. One alley
+consumed a full builder context; decomposition is the mechanism, not effort. This entry is deliberately compact: the measured
 result behind it (`docs/evidence/skill-context-tests.md` at the repo root) is that the
 engineering scaffold transfers through a short skill, composition transfers
 only through *renders* — so the loop below is the mechanism, and more prose is

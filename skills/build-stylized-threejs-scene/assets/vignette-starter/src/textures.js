@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 
+/* Signage kit: `make`/`cached`, text fitting, and the four parameterized
+ * sign composites (signPlate, fascia, noticeBoard, banner) live in
+ * core/texkit.js and are re-exported here.  Mind each composite's native
+ * aspect -- see the texkit header. */
+export * from './core/texkit.js';
+
 const cache = new Map();
 
 /**

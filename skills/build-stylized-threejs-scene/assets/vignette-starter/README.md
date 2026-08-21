@@ -42,6 +42,39 @@ The lighting rig is data (`RIG` in `main.js`): warm quantized key with the
 only shadow map, strong cool fill from the opposite quarter, weak below-front
 bounce, hemisphere with a violet ground. Retune it there.
 
+## Signage kit (src/core/texkit.js)
+
+Generated signage is the cheapest, highest-value specificity lever a scene
+has — the best sense-of-place score measured across ~17 scored scenes (0.81,
+the Tokyo test) was carried almost entirely by Canvas2D signs. Name the
+tenants and owners: a board that says 喫茶 やまびこ or "HARBOUR OFFICE" does
+more for a street than any amount of geometry. Invented names only — no real
+brands, no people.
+
+The kit (re-exported through `src/textures.js`) is the Sakura Crossing
+flagship's texture kernel, parameterized:
+
+- **Kernel** — `make(w, h, draw, opts)` → CanvasTexture (sRGB, anisotropy 4);
+  `cached(key, w, h, draw)` memoized; `fitText` (shrink-to-fit),
+  `centered` (fitted + letterspaced), `vertical` (CJK stacking), `rule`,
+  `hex`/`col`, and `JP_FONT` — a font stack with JP fallbacks so CJK renders
+  everywhere with zero binary assets.
+- **Composites** — fill these as data, one call per tenant:
+  - `signPlate({ title, sub, bg, ink, accent, border })` — bordered shop
+    plate, native aspect **4:1** (512×128).
+  - `fascia({ title, sub, bg, ink, panelJoints })` — frontage board with bar
+    rules and optional panel seams, native aspect **6.4:1** (1024×160).
+  - `noticeBoard({ lines, bg, ink, pin })` — pinned paper, 2–6 short lines,
+    native aspect **3:4** (384×512).
+  - `banner({ text, bg, ink, vertical })` — noren with genuinely transparent
+    slits (use a transparent material), **2:1** (512×256); vertical nobori
+    stacking CJK, **1:4** (192×768).
+
+**The aspect rule:** each texture must land on a face matching its native
+aspect — a 4:1 plate on a tall post face is a 24-fold crush that renders as
+an unreadable smear, not an error. If a sign is a blur, compare the two
+aspect ratios before touching anything else.
+
 ## Architecture kit (src/builders.js)
 
 Roof planes, stairs and terrain banks are **never hand-placed** — a guessed
@@ -200,3 +233,70 @@ node scripts/check-spatial.mjs     # exit 0 pass · 1 defects found · 2 crashed
 
 Every failure carries a measured distance and a rounded position — walk the
 camera there with `__shot` to see the defect before fixing it.
+
+## City scale
+
+When the brief is bigger than one agent can hold — more than ~10 buildings,
+more than one narrative zone — the vignette workflow does not scale by trying
+harder. Read `references/city-scale.md` in the skill for the full design; the
+machinery lives here:
+
+```
+city brief -> city-plan.json          (coordinator writes the contracts)
+           -> validate-city-plan.mjs  (plan gate: envelopes, sockets, cycles, placeholders)
+           -> src/kit/                (one agent builds the shared generators first)
+           -> district modules        (parallel agents, one defineDistrict each)
+           -> composeCity             (scene.js composes; anchors assert as each district lands)
+           -> check-city.mjs          (integration gate: seams, spatial, flood fill, budgets)
+```
+
+A district module is a `defineDistrict` descriptor; a city's `scene.js` calls
+`composeCity` instead of building directly and keeps the `buildVignette`
+export shape so `main.js` is unchanged:
+
+```js
+// src/districts/harbor.js
+import { defineDistrict } from '../core/district.js';
+export const harbor = defineDistrict({
+  id: 'harbor',
+  envelope: { x0: -16, z0: 16, x1: 16, z1: 40 },
+  after: ['old-town'],           // build order = groundAt order
+  build(ctx) {
+    // ctx is wrapped: every collide/platform/interact is stamped
+    // { owner: 'harbor' }, every add() is named 'district:harbor:<name>',
+    // and anything centered >2 m outside the envelope collects a warning.
+    ctx.add(stairs({ w: 3, rise: 0.15, run: 0.3, steps: 8, dir: 'z-', at: [2, 0, 18.4], mat, ctx }), 'quay-stairs');
+  },
+});
+
+// src/scene.js
+const city = composeCity({ plan, districts: [oldTown, harbor, hillside], ctx });
+return { ...usualVignetteExports, plan, city }; // check-city.mjs needs `city`
+```
+
+The contracts, mechanized:
+
+- **Envelope** — the parcel. Registrations outside it warn (2 m tolerance);
+  overlapping envelopes fail the plan gate.
+- **Socket** — a paired boundary crossing (`kind`, `axis`, `width`, `y`,
+  `mate`). `core/seams.js` measures ground continuity across the line
+  (straddling sample pairs over the full width, step-height limit, `y` ±0.25)
+  and corridor clearance (walker radius applied, clear passage ≥ width − 1 m
+  for 3 m into each side).
+- **Anchor** — a promised ground height, asserted by `composeCity` the moment
+  the owning district finishes building. A point anchor and a seam check
+  catch different spellings of the same bug: a stair flight topping out 0.6 m
+  low trips the anchor; a flight built half the socket's width passes every
+  anchor and fails the seam sweep.
+- **Missing module** — a plan district with no registered module (or a module
+  with no plan entry) throws. A module nobody imports builds nothing,
+  silently; here it is loud.
+
+`scripts/check-city.mjs` is the integration gate (exit 0/1/2): plan validity,
+the composeCity asserts, seams, the global spatial audit with owners resolved
+by envelope, a city-wide flood fill (radius 0.34, step 0.38, visited keyed on
+cell + height bucket) from the first district's first waypoint to EVERY
+district's waypoints — a waypoint unreachable across a seam is the primary
+failure this system exists to catch — and per-district budget checks. District
+agents mid-build run `node scripts/check-city.mjs --district <id>` for their
+own subset.

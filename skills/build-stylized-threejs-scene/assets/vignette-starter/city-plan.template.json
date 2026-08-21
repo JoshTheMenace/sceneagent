@@ -1,0 +1,56 @@
+{
+  "$comment": "City plan: the coordinator's contract for a multi-district build. Every district agent receives this file plus its own district entry. Placeholder text starting with 'Replace'/'Describe'/'Name the' fails validation.",
+  "city": {
+    "name": "Replace with the city's name",
+    "promise": "Replace with one sentence: place, era, hour, weather, and what a visitor discovers",
+    "footprint_m": [120, 80],
+    "palette_notes": "Describe the city-wide palette roles: value ladder, shade tint, the one or two saturated accents and who owns them"
+  },
+  "shared_kit": {
+    "module": "src/kit/",
+    "$comment": "Built BEFORE any district by the kit stage. Districts import generators from here only — no district may define its own building generator.",
+    "builders_required": [
+      "Name the building/prop generators every district will need, e.g. rowhouse, warehouse, quaycrane"
+    ],
+    "signage_tenants": [
+      "Name the tenant/sign identities the kit's signage tables must carry"
+    ]
+  },
+  "districts": [
+    {
+      "id": "district-id-kebab",
+      "name": "Replace with the district's name",
+      "brief": "Replace with 2-4 sentences of narrative intent: who lives/works here, what happened ten minutes ago, what the player should feel crossing it",
+      "envelope": { "x0": -60, "z0": -40, "x1": 0, "z1": 0 },
+      "after": [],
+      "sockets": [
+        {
+          "id": "socket-id",
+          "kind": "road",
+          "at": [0, -20],
+          "axis": "x",
+          "width": 6,
+          "y": 0.0,
+          "mate": "other-district-socket-id"
+        }
+      ],
+      "anchors": [
+        { "x": -30, "z": -20, "expect_top": 0.0, "tol": 0.05 }
+      ],
+      "waypoints": [
+        { "name": "Name a place a player must be able to reach", "x": -30, "z": -20 }
+      ],
+      "landmarks_citywide": [],
+      "budgets": { "max_meshes": 150, "max_triangles": 80000 }
+    }
+  ],
+  "vista_cameras": [
+    {
+      "name": "vista-name",
+      "position": [0, 24, 60],
+      "target": [0, 4, 0],
+      "fov": 50,
+      "subject": "Name the Object3D this vista exists to show"
+    }
+  ]
+}
