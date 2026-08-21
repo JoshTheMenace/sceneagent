@@ -26,7 +26,18 @@ import * as THREE from 'three';
  *     grounded at one end and see-through under the rest, and the
  *     point check passes it.  (Runs are audited straight: an L of two
  *     runs that touch clusters into one unit and can fall under the
- *     aspect gate.)
+ *     aspect gate.)  A RAKED run — a handrail up a flight, a kerb up a
+ *     ramp — is measured against a FITTED base instead: its own base
+ *     line is sampled per station, and if that is a consistent grade
+ *     (R² >= 0.95, monotonic, over 0.5 m of rise) each station is judged
+ *     against the fitted line anchored at the run's own lowest point,
+ *     with the tolerance widened by the ground's roughness about its own
+ *     line so a flight of steps is a line plus a sawtooth rather than a
+ *     failure.  The test is on the RUN's base, never the ground's: a
+ *     level beam over falling ground has perfectly linear ground under
+ *     it and still fails, which it must.  Two districts had "fixed" the
+ *     old behaviour by stripping the prop tag off a stair rail, which
+ *     deletes it from the audit entirely.
  *   OVERLAP — pairwise world-bbox intersection between TAGGED units
  *     > 15 % of the smaller volume => two assemblies interpenetrating.
  *     AABB only, so it is coarse for rotated shapes, and pooled island
@@ -92,6 +103,16 @@ const RUN_PROBE_UP_M = 0.45; // must exceed RUN_BURIED_M
 const RUN_MIN_LEN_M = 2;
 const RUN_ASPECT = 3;
 const RUN_MIN_H_M = 0.3;
+// A RAKED run — a handrail up a flight, a kerb up a ramp — has a base line
+// that climbs.  Judged against the run's own lowest point it floats at one
+// end and buries at the other, which is a false failure two districts
+// "fixed" by stripping the prop tag off the rail: that deletes it from the
+// audit, the exact opposite of the intent.  So the base line is FITTED when
+// the run's own base actually has a consistent grade.
+const RAKE_MIN_STATIONS = 4;
+const RAKE_MIN_RISE_M = 0.5;  // under this the flat-base sweep is already inside tolerance
+const RAKE_MIN_R2 = 0.95;     // the base has to be a line, not a scatter
+const RAKE_MONO_TOL_M = 0.05; // and it may not step back against its own grade
 const OVERLAP_FRAC = 0.15;
 const WIDE_M = 1.0;
 const CORNER_INSET_M = 0.08;
@@ -190,6 +211,28 @@ function buildDowncast(scene) {
     return best;
   }
 
+  // lowest OWN vertex inside an XZ rect — a run's base line, station by
+  // station.  Vertices rather than a plumb ray on purpose: a ray at the
+  // station point misses a narrow post cap between stations, and what a
+  // base line wants is the low envelope over a slab, not a point sample.
+  function lowestIn(x0, z0, x1, z1, accept) {
+    let best = Infinity;
+    for (let cx = Math.floor(x0 / CELL_M); cx <= Math.floor(x1 / CELL_M); cx += 1) {
+      for (let cz = Math.floor(z0 / CELL_M); cz <= Math.floor(z1 / CELL_M); cz += 1) {
+        const bucket = cells.get(`${cx},${cz}`);
+        if (!bucket) continue;
+        for (const id of bucket) {
+          const t = tris[id];
+          if (!accept(t.mesh, t.face)) continue;
+          if (t.ax >= x0 && t.ax <= x1 && t.az >= z0 && t.az <= z1 && t.ay < best) best = t.ay;
+          if (t.bx >= x0 && t.bx <= x1 && t.bz >= z0 && t.bz <= z1 && t.by < best) best = t.by;
+          if (t.cx >= x0 && t.cx <= x1 && t.cz >= z0 && t.cz <= z1 && t.cy < best) best = t.cy;
+        }
+      }
+    }
+    return best === Infinity ? null : best;
+  }
+
   // surfaces crossed below (x, z, y) over faces `allow` accepts: an odd
   // count means the point is inside one of those solids (closed geometry)
   function crossingsBelow(x, z, y, allow) {
@@ -205,7 +248,7 @@ function buildDowncast(scene) {
     return n;
   }
 
-  return { down, crossingsBelow, triangles: tris.length };
+  return { down, lowestIn, crossingsBelow, triangles: tris.length };
 }
 
 /* ---- audit units --------------------------------------------------- */
@@ -328,6 +371,62 @@ function clusterIslands(setName, islands, touch) {
   });
 }
 
+/* ---- raked runs ----------------------------------------------------- */
+
+/** Least-squares line y = m·t + c, with R² and the rms residual. */
+function fitLine(ts, ys) {
+  const n = ts.length;
+  let st = 0;
+  let sy = 0;
+  for (let i = 0; i < n; i += 1) { st += ts[i]; sy += ys[i]; }
+  const mt = st / n;
+  const my = sy / n;
+  let stt = 0;
+  let sty = 0;
+  for (let i = 0; i < n; i += 1) { stt += (ts[i] - mt) ** 2; sty += (ts[i] - mt) * (ys[i] - my); }
+  const m = stt < 1e-9 ? 0 : sty / stt;
+  const c = my - m * mt;
+  let ssRes = 0;
+  let ssTot = 0;
+  for (let i = 0; i < n; i += 1) { ssRes += (ys[i] - (m * ts[i] + c)) ** 2; ssTot += (ys[i] - my) ** 2; }
+  return { m, c, r2: ssTot < 1e-9 ? 1 : 1 - ssRes / ssTot, rms: Math.sqrt(ssRes / n) };
+}
+
+/* The LOW envelope of a set of points.  A post-and-rail run's own bottom
+ * alternates between the post feet (the base) and the rail's underside a
+ * metre above them, so a plain fit sits between the two and finds a grade
+ * in a perfectly level fence.  Fit, discard everything above the fit,
+ * refit — twice; what survives is the feet. */
+function envelopeFit(ts, ys) {
+  let keep = ts.map((_, i) => i);
+  let fit = fitLine(ts, ys);
+  for (let pass = 0; pass < 2; pass += 1) {
+    const low = keep.filter((i) => ys[i] <= fit.m * ts[i] + fit.c + 1e-6);
+    if (low.length < RAKE_MIN_STATIONS) break;
+    keep = low;
+    fit = fitLine(keep.map((i) => ts[i]), keep.map((i) => ys[i]));
+  }
+  return { ...fit, keep };
+}
+
+/**
+ * Is this run's own base line a consistent grade?  Returns the fitted line
+ * or null.  Note it is the RUN's base that decides, never the ground's: a
+ * level beam over falling ground has a perfectly linear ground under it and
+ * must still fail, and only its own flat base line says so.
+ */
+function rakeOf(ts, ownBase) {
+  if (ts.length < RAKE_MIN_STATIONS) return null;
+  const fit = envelopeFit(ts, ownBase);
+  const rise = Math.abs(fit.m) * (ts[ts.length - 1] - ts[0]);
+  if (rise < RAKE_MIN_RISE_M || fit.r2 < RAKE_MIN_R2) return null;
+  const sign = Math.sign(fit.m);
+  for (let k = 1; k < fit.keep.length; k += 1) {
+    if ((ownBase[fit.keep[k]] - ownBase[fit.keep[k - 1]]) * sign < -RAKE_MONO_TOL_M) return null;
+  }
+  return { m: fit.m, c: fit.c, rms: fit.rms, rise };
+}
+
 function isRun(unit) {
   if (unit.linearTag) return true;
   const size = unit.box.getSize(new THREE.Vector3());
@@ -441,6 +540,7 @@ export function createSpatialCheck({ scene, groundAt = null, colliders = [], foo
 
     /* ground contact: point check for compact units, station sweep for runs */
     let runCount = 0;
+    let rakedCount = 0;
     for (const unit of units) {
       if (unit.airborne) continue;
       if (isRun(unit)) {
@@ -450,36 +550,78 @@ export function createSpatialCheck({ scene, groundAt = null, colliders = [], foo
         const alongX = size.x >= size.z;
         const bottom = box.min.y;
         const mid = alongX ? (box.min.z + box.max.z) / 2 : (box.min.x + box.max.x) / 2;
+        const half = (alongX ? size.z : size.x) / 2 + 0.02;
         const t0 = alongX ? box.min.x : box.min.z;
         const t1 = alongX ? box.max.x : box.max.z;
+        const stations = [];
+        for (let t = t0 + RUN_STEP_M / 2; t < t1; t += RUN_STEP_M) stations.push(t);
+        const at = (t) => (alongX ? [t, mid] : [mid, t]);
+
+        // the run's OWN base at each station — the low envelope of its own
+        // geometry over that slab, which is what a base line is
+        const ownBase = stations.map((t) => {
+          const a = t - RUN_STEP_M / 2;
+          const b = t + RUN_STEP_M / 2;
+          const v = alongX
+            ? cast.lowestIn(a, mid - half, b, mid + half, unit.isOwn)
+            : cast.lowestIn(mid - half, a, mid + half, b, unit.isOwn);
+          return v === null ? bottom : v;
+        });
+        const rake = rakeOf(stations, ownBase);
+        if (rake) rakedCount += 1;
+
+        // A flight of steps is a line plus a sawtooth, so a fitted base
+        // cannot sit on every tread: widen the tolerance by the ground's
+        // own roughness about its line, which is zero on a smooth ramp.
+        let slack = 0;
+        if (rake) {
+          const gt = [];
+          const gy = [];
+          stations.forEach((t, i) => {
+            const [px, pz] = at(t);
+            const g = cast.down(px, pz, box.max.y + 0.5, unit.isOwn);
+            if (g) { gt.push(t); gy.push(g.y); }
+          });
+          slack = 2 * Math.max(rake.rms, gt.length >= 2 ? fitLine(gt, gy).rms : 0);
+        }
+        const floatLimit = RUN_FLOAT_M + slack;
+        const buriedLimit = RUN_BURIED_M + slack;
+        // the fitted base, anchored at the run's own lowest point so a rail
+        // that rides uniformly above its flight still reads as floating
+        const tRef = rake ? (rake.m > 0 ? stations[0] : stations[stations.length - 1]) : 0;
+        const baseAt = (t) => (rake ? bottom + rake.m * (t - tRef) : bottom);
+
         const floats = [];
         const burieds = [];
-        let total = 0;
-        for (let t = t0 + RUN_STEP_M / 2; t < t1; t += RUN_STEP_M) {
-          total += 1;
-          const px = alongX ? t : mid;
-          const pz = alongX ? mid : t;
-          const hit = cast.down(px, pz, bottom + RUN_PROBE_UP_M, unit.isOwn);
-          const gap = hit ? bottom - hit.y : Infinity;
-          if (gap > RUN_FLOAT_M) {
+        const total = stations.length;
+        for (const t of stations) {
+          const base = baseAt(t);
+          const [px, pz] = at(t);
+          const hit = cast.down(px, pz, base + RUN_PROBE_UP_M + slack, unit.isOwn);
+          const gap = hit ? base - hit.y : Infinity;
+          if (gap > floatLimit) {
             const above = cast.down(px, pz, box.max.y + 0.5, unit.isOwn);
-            if (above && above.y > bottom + RUN_BURIED_M) burieds.push({ p: [px, bottom, pz], d: above.y - bottom });
-            else floats.push({ p: [px, bottom, pz], gap });
-          } else if (gap < -RUN_BURIED_M) {
-            burieds.push({ p: [px, bottom, pz], d: -gap });
+            if (above && above.y > base + buriedLimit) burieds.push({ p: [px, base, pz], d: above.y - base });
+            else floats.push({ p: [px, base, pz], gap });
+          } else if (gap < -buriedLimit) {
+            burieds.push({ p: [px, base, pz], d: -gap });
           }
         }
         const list = (marks) => marks.slice(0, 5).map((m) => `(${round2(m.p[0])}, ${round2(m.p[2])})`).join(' ') + (marks.length > 5 ? ' …' : '');
+        const how = rake
+          ? ` [raked run: base line ${rake.m > 0 ? '+' : ''}${round2(rake.m * 100)} % along ${alongX ? 'x' : 'z'} over ${round2(rake.rise)} m of rise, ` +
+            `judged against the FITTED base ±${round2(floatLimit)} m]`
+          : '';
         if (floats.length) {
           const worst = floats.reduce((a, b) => (b.gap > a.gap ? b : a));
           fail('FLOAT-RUN', unit.name,
-            `${floats.length}/${total} stations unsupported along the run, worst gap ${worst.gap === Infinity ? 'open air' : `${round2(worst.gap)} m`} — stations ${list(floats)}`,
+            `${floats.length}/${total} stations unsupported along the run, worst gap ${worst.gap === Infinity ? 'open air' : `${round2(worst.gap)} m`} — stations ${list(floats)}${how}`,
             worst.p);
         }
         if (burieds.length) {
           const worst = burieds.reduce((a, b) => (b.d > a.d ? b : a));
           fail('BURIED-RUN', unit.name,
-            `${burieds.length}/${total} stations more than ${RUN_BURIED_M} m under their surface, worst ${round2(worst.d)} m — stations ${list(burieds)}`,
+            `${burieds.length}/${total} stations more than ${round2(buriedLimit)} m under their surface, worst ${round2(worst.d)} m — stations ${list(burieds)}${how}`,
             worst.p);
         }
         continue;
@@ -686,12 +828,13 @@ export function createSpatialCheck({ scene, groundAt = null, colliders = [], foo
       tagged: taggedCount,
       clusters: units.length - taggedCount,
       runs: runCount,
+      rakedRuns: rakedCount,
       triangles: cast.triangles,
       seamSamples: samples,
       seamSkippedInColliders: skipped,
       warnings: warnings.length,
     };
-    const header = `spatial audit: ${stats.units} units (${stats.tagged} tagged, ${stats.clusters} pooled clusters, ${stats.runs} runs), ${stats.triangles} triangles, ${stats.seamSamples} seam samples (${stats.seamSkippedInColliders} inside colliders skipped)`;
+    const header = `spatial audit: ${stats.units} units (${stats.tagged} tagged, ${stats.clusters} pooled clusters, ${stats.runs} runs, ${stats.rakedRuns} of them raked), ${stats.triangles} triangles, ${stats.seamSamples} seam samples (${stats.seamSkippedInColliders} inside colliders skipped)`;
     const lines = [header];
     for (const f of failures) lines.push(`FAIL ${f.type} ${f.object}\n  - ${f.detail} @ [${f.position.join(', ')}]`);
     for (const w of warnings) lines.push(`WARN ${w.type} ${w.object}\n  - ${w.detail} @ [${w.position.join(', ')}]`);

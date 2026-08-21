@@ -102,6 +102,68 @@ is impossible by construction:
 `ctx.groundAt(x, z)` so walkable raised surfaces are registered data, not
 just geometry.
 
+### Builders added
+
+Every one of these was written independently by a district agent building a
+real four-district city, which is the signal that it belongs to everybody
+rather than to one district. Same discipline as the rest of the kit: derived
+from joints, pooled per material, and registering only the colliders it
+should.
+
+- `stairRail({ from, to, h, post, rail, posts, sink, mat, side })` — **a
+  handrail that climbs.** Takes the flight's two end joints on its walking
+  surface; the rake is `atan2(dy, hypot(dx, dz))` and is never an argument,
+  because an angle passed in can disagree with the joints it rides. `side` is
+  a lateral offset along the plan normal, so `±(w/2 + 0.05)` gives a rail on
+  each edge. The posts stand on a raked **stringer** and that member is
+  load-bearing in two senses: a rail carried on posts alone has a base line
+  that alternates between post feet and the rail's own underside, the spatial
+  audit cannot fit a rake to it, and it then judges a climbing rail against a
+  level base and fails it every time. The stringer is tessellated along its
+  length for the same reason — a 5 m member with two vertices has nothing in
+  the middle of it for any per-station sampler to find. `userData.joints`
+  carries both ends so a second flight butts to the first.
+- `wallRun({ points, h, thick, coping, copingOver, piers, stepMax, panel, mat, copingMat, ctx, collide })`
+  — **a boundary wall that steps with the ground.** Every panel is seated on
+  its own ground (`base = min(groundAt) − 0.06`, `top = max(groundAt) + h`),
+  so the coping steps up the slope and the foot follows it down instead of
+  becoming a level beam see-through under half its length. Panel length comes
+  from the fall under that panel, not from a constant, and neighbours that
+  agree are folded back into one — so a flat wall is one mesh and one swept
+  unit while a stepped wall is the courses it really is. Ends and corners
+  always get a **pier**: a wall that stops in mid-air reads as a grey card
+  standing on the paving. One collider per panel, each the AABB of its own
+  rotated box. The coping does not cast — a 60 mm overhang at this cascade
+  size renders its own shadow as sawtooth.
+- `pier({ w, d, h, at, cap, capOver, mat, capMat, ctx })` — the terminating
+  pier, the gate post, and the way a wall is gapped for an opening; registers
+  its own collider. **A gate needs 1.8 m of clear gap between pier faces**: a
+  collider is inflated by the player's 0.34 m radius on every side, so the
+  1.1 m opening that reads well on the page is 0.42 m of walkable ground — a
+  gate you can see through and not walk through, and only a flood fill finds
+  it.
+- `bench({ w, seatH, back, at, facing, mat, ctx, collide })` — `facing` is the
+  direction the sitter looks (`[dx, dz]` or radians) and the yaw is derived
+  from it. Deliberately not a raw `ry`: a bench's rotation is a function of
+  which side of the space it stands on, so a pair written with one constant is
+  guaranteed wrong for one of them.
+- `leanTo({ w, d, h, pitch, open, posts, at, mat, roofMat, ctx })` — an
+  open-fronted working shelter. Roof from `shedRoof` with its `userData` read
+  rather than re-derived; the side boards are cut one by one to the roof line,
+  so the rake is followed exactly instead of a box poking through it.
+  **Colliders for the back and sides only** — a box around an open-fronted
+  structure is a shelter you cannot stand in, which renders perfectly and
+  reads as unreachable in the fill with nothing reporting a problem.
+- `stairs()` gained a **going guard**: in dev it warns when `run < 0.36`. The
+  route gate strides 0.35 m, so a 0.28 m going puts two treads inside one
+  stride and the rise it measures is doubled — a perfectly good flight is
+  declared unclimbable. It warns rather than throws; a decorative flight
+  nobody has to climb is legal.
+
+Anything mounted or airborne inside these (the lean-to's roof) carries
+`userData.airborne = true` so the audit does not read a carried part as a
+float.
+
 ## Camera-legibility gate
 
 The most-repeated failure across scene reviews is a review camera that does
@@ -243,11 +305,13 @@ machinery lives here:
 
 ```
 city brief -> city-plan.json          (coordinator writes the contracts)
-           -> validate-city-plan.mjs  (plan gate: envelopes, sockets, cycles, placeholders)
+           -> validate-city-plan.mjs  (plan gate: envelopes, sockets, terrain, cycles, placeholders)
+           -> src/core/terrain.js     (ONE ground surface over the whole footprint, before anything else)
            -> src/kit/                (one agent builds the shared generators first)
-           -> district modules        (parallel agents, one defineDistrict each)
+           -> district modules        (parallel agents, one defineDistrict each; they DRESS the terrain)
            -> composeCity             (scene.js composes; anchors assert as each district lands)
-           -> check-city.mjs          (integration gate: seams, spatial, flood fill, budgets)
+           -> check-city.mjs          (integration gate: seams, spatial, flood fill, budgets,
+                                       surrounds, sight corridors, landmarks, interactions)
 ```
 
 A district module is a `defineDistrict` descriptor; a city's `scene.js` calls
@@ -269,10 +333,140 @@ export const harbor = defineDistrict({
   },
 });
 
-// src/scene.js
-const city = composeCity({ plan, districts: [oldTown, harbor, hillside], ctx });
-return { ...usualVignetteExports, plan, city }; // check-city.mjs needs `city`
+// src/scene.js — takes an options bag so one district can be built alone
+export function buildVignette(scene, { only = null } = {}) {
+  const MODULES = [oldTown, harbor, hillside];
+  const city = composeCity({
+    plan,
+    districts: only ? MODULES.filter((m) => m.id === only) : MODULES,
+    ctx,
+    terrainMaterials: { ground, paving, bank, surrounds, shore, skirt, water },
+    only,
+  });
+  return { ...usualVignetteExports, plan, city }; // check-city.mjs needs `city`
+}
 ```
+
+## Terrain
+
+**One continuous ground surface over the whole city, built before any
+district and never by a district.** `src/core/terrain.js`, driven entirely by
+the plan's `terrain` block, and it is the single most valuable rule on the
+page. It was learned expensively: in the first city built by decomposition
+ground was left to each district, and an independent review named the result
+its highest-impact defect —
+
+> "Ground is a per-district responsibility. Disjoint envelopes, each district
+> platforming its own rectangle, nothing owning what lies between or beyond.
+> That one decision produces the floating slabs in all four overhead frames,
+> the headland's severed ground, net-lofts' void behind its wall, both blank-
+> plane seam descents, and the row's missing harbour."
+
+The decisive part is the rest of that note: **no district agent could have
+fixed it from inside its parcel.** A district can only build to its own
+envelope, so the gap between two envelopes and everything beyond the outermost
+one is owned by nobody and built by nobody. The fix is not a rule telling
+districts to be careful; it is taking the ground away from them.
+
+```jsonc
+"terrain": {
+  "owner": "coordinator",            // never a district — the gate fails that
+  "cell_m": 2.0,                     // target lattice on open ground
+  "levels": [                        // EVERY district, exactly once
+    { "id": "quay",    "y": 0.0 },
+    { "id": "terrace", "y": 1.6 },
+    { "id": "upper",   "y": 3.2 }
+  ],
+  "crossings": [                     // one entry per socket PAIR
+    { "socket": "terrace-quay-stairs", "kind": "stairs", "going": 0.42, "rise": 0.18 },
+    { "socket": "upper-terrace-road",  "kind": "road",   "grade": 0.14 }
+  ],
+  "surrounds": { "kind": "water", "water_y": -0.5, "y": -2.6, "blend_m": 7 }
+}
+```
+
+`composeCity` calls it for you and routes `ctx.groundAt` through it, so a
+district arrives to ground that already stands at its contracted level with
+both halves of every crossing already in it. The API is one function:
+
+```js
+const { terrainHeightAt, group, stats } = buildTerrain({ plan, ctx, materials });
+terrainHeightAt(x, z);   // the walked ground, anywhere in the world
+```
+
+What it builds, and why each piece is there:
+
+- **Levels** — each district's envelope held flat at its `y`. Anchors are then
+  answered by construction rather than by a district remembering to lay a slab.
+- **Crossings** — the terrain builds **both halves** of every socket crossing:
+  a graded ramp for `ramp`/`road`/`path`, a flight for `stairs`, with a landing
+  at the line on each side. A seam made by one builder cannot disagree with
+  itself. Two districts each building their own half can, and that is what a
+  seam bug *is*. Every flight's going is clamped to **0.36 m**: the route gate
+  strides 0.35, so a 0.33 going puts two treads in one stride, measures twice
+  the rise, and calls a perfectly good flight unclimbable.
+- **Surrounds** — everything inside `footprint_m` but outside every envelope,
+  blended continuously out of the nearest levels and into the treatment
+  (`water` / `moor` / `flat` / `sand` / `scrub`) over `blend_m`. This is the
+  half no district could ever have built. A `water` surround also lays a water
+  plane four times the footprint: sized to the footprint its own straight edge
+  lands in every overhead frame and reads as exactly the severed edge the
+  apron exists to remove.
+- **Apron and skirt** — a ring past the footprint falling away, plus vertical
+  walls down to a floor, so the world is a **closed solid**. A town that ends
+  at a mesh boundary reads as a cut from any camera above eye height.
+
+where together they killed seventeen seam defects at once:
+
+- **A conforming grid.** Grid lines go in at the footprint edges, at every
+  envelope edge (plus a hairline either side, so a level change draws as a
+  vertical face instead of ramping across a whole cell), at every crossing
+  rect edge and at every stair tread edge — and *only then* is each gap
+  subdivided to `cell_m`. Nothing straddles a designed edge, so a district
+  promised 1.6 m gets exactly 1.6 m. Quads split on **alternating** diagonals:
+  split them all one way and the ground grows a diagonal grain the ink pass
+  draws as parallel creases.
+- **The walked surface is the minimum of the field at a cell's four corners.**
+  Those corners are the drawn mesh's own nodes and the mesh interpolates them,
+  so `min(corners)` ≤ the drawn surface everywhere inside the cell: the height
+  query is *provably* never above the ground the eye sees. Take the cell's
+  centre height instead and on a 1-in-1.4 face the query stands the player up
+  to 0.8 m in the air — which is exactly the "walkable height X but first
+  surface at Y" defect the spatial audit reports.
+
+**Districts dress this ground.** Pads, kerbs, steps, paving and revetments
+*laid on* it; never a platform under it. `composeCity` warns on any single
+district platform over ~30 m²:
+
+```
+WARN [terrace] LAYING-GROUND: platform x -20..20, z -12..14 is 1040 m² (limit 30)
+  at top 1.6 — you are laying ground, which is the terrain's job. A district
+  plate stops at the envelope and nothing owns what lies between or beyond it:
+  that is the floating-slab defect. Set the level in plan.terrain.levels and
+  DRESS this surface instead — or, if it really is one made surface, say so here.
+```
+
+### Neighbour stubs
+
+Measured, districts built in isolation hold sense of place, maintainability
+and performance, and lose ~0.07 of *composition* — identically in every
+district, and it is the one loss that does not shrink as districts are added.
+The cause is simple: an agent alone composes its interior against its own
+work and its **edges against nothing**.
+
+So `districts[].massing` in the plan is a rough block-out — the right mass at
+the right height, nothing more — and
+
+```
+node scripts/check-city.mjs --district upper
+```
+
+composes with `only: 'upper'`: the terrain in full, `upper` in full, and every
+other district as its `massing` stubs, collider-registered and owner-stamped
+like anything else. The agent's own frames then contain what its neighbours
+will actually put there. A district with no `massing` gets a `NO-MASSING`
+warning naming the district that is now composing against empty space. When
+every district is present, `massing` is ignored entirely.
 
 The contracts, mechanized:
 
@@ -291,6 +485,60 @@ The contracts, mechanized:
 - **Missing module** — a plan district with no registered module (or a module
   with no plan entry) throws. A module nobody imports builds nothing,
   silently; here it is loud.
+- **Surrounds** — `surrounds.owner` names the district that builds everything
+  inside `footprint_m` but outside every envelope: sea, moor, backdrop. The
+  plan gate refuses a plan without it. Unowned negative space is not neutral —
+  the district nearest it builds to the limit of its 2 m envelope tolerance
+  trying to hide the cut, which is how a quay came to end in water 2 m wide.
+- **Boundary feature** — a wall, kerb, railing or revetment standing ON a
+  shared boundary, with one `owner` and the `mate` that must not build there.
+  `along` is the axis the feature RUNS ALONG (not a socket's crossing axis):
+  `along: 'z'` is a line at `x = at` spanning `z` `from`..`to`. The gate checks
+  the line is genuinely on the edge those two districts share, that the run
+  fits the stretch they share, and that no two features overlap on one line.
+  Two districts each raising a wall on the same line composed correctly by
+  luck once; no geometric gate can tell a double wall from a thick one.
+
+### City gates
+
+Four checks that only a city needs, each of them a real failure paid for once:
+
+- **Plan gate** (`scripts/validate-city-plan.mjs`, exit 0/1/2) — everything
+  above plus `city.compass.north_xz` (a non-zero 2-vector) and `city.sun`
+  (one of the eight compass points or degrees, elevation 5–80°). The light rig
+  is *derived* from those two by `src/core/sunrig.js` and never hand-placed: a
+  palette note promising "low sun from the south-east" against a rig aimed
+  south-west is a bug that belongs to nobody, because every district art
+  directs to the light it can see.
+- **Vista aim** (`src/core/camcheck.js`) — a subject inside the frustum is a
+  much weaker promise than a subject the camera is aimed at. Past |ndc| 0.72
+  in either axis the check WARNS, past 0.95 it FAILS, and the ndc numbers are
+  in the message either way. Warnings print and are returned in
+  `checkAllCameras().warnings`; they do not change exit status. Derive a
+  vista's `target` from its `subject` — a camera pointing one way with its
+  subject sitting another makes the district keep a corridor clear along the
+  published aim and then fails on the subject anyway.
+- **Owner down to the mesh** (`src/core/district.js`) — the kit merges per
+  material and names its output `pool-0`, `pool-1`… in *every* district, so
+  "blocked by pool-0" named nothing. `composeCity` stamps every anonymous or
+  `pool-N` mesh under an added group as `<district>:<group>:<old>`, one
+  traverse per group after the build (a group is usually still empty at
+  `ctx.add` time). The same wrapper throws if `ctx.interact` is handed an
+  entry with no `hitbox` Object3D: `main.js` raycasts
+  `interactables.map((e) => e.hitbox)` every frame, and without the check the
+  page blanks from inside the render loop with one line of three.js internals.
+- **Raked runs** (`src/core/spatialcheck.js`) — the FLOAT-RUN sweep used to
+  judge every station of a linear unit against the unit's single lowest point,
+  so a handrail that climbs its own flight floated at one end and buried at
+  the other. Two districts "fixed" that by stripping the prop tag off the
+  rail, which deletes it from the audit entirely. Now the run's own base line
+  is sampled per station; if it is a consistent grade (R² ≥ 0.95, monotonic,
+  over 0.5 m of rise) each station is judged against the FITTED base anchored
+  at the run's lowest point, with the tolerance widened by the ground's own
+  roughness about its line — a flight of steps is a line plus a sawtooth. The
+  test is on the RUN's base, never the ground's, which is why a level beam
+  over falling ground still fails: the ground under it is perfectly linear and
+  its own base line is flat. The audit header reports how many runs were raked.
 
 `scripts/check-city.mjs` is the integration gate (exit 0/1/2): plan validity,
 the composeCity asserts, seams, the global spatial audit with owners resolved
@@ -299,4 +547,36 @@ cell + height bucket) from the first district's first waypoint to EVERY
 district's waypoints — a waypoint unreachable across a seam is the primary
 failure this system exists to catch — and per-district budget checks. District
 agents mid-build run `node scripts/check-city.mjs --district <id>` for their
-own subset.
+own subset, composed against neighbour stubs.
+
+Four more checks close gaps that nothing else covered:
+
+- **Surrounds coverage.** The spatial audit's hole grid samples the union of
+  *envelopes*, so the space between and beyond them — most of a city footprint,
+  and all of the sea or moor — was checked by nothing at all, and
+  `surrounds.owner` only proved the ownership was *assigned*, never that it was
+  discharged. This samples the whole `city.footprint_m` by downcast; a hole
+  outside every envelope reports against the surrounds owner by name.
+- **Sight corridors.** Each `sight_corridors[]` entry is raycast from `from` to
+  `to` at `min_clear_h` across five offsets over `half_width`, and a block
+  names the mesh, the owning district and how far along it stands. This is how
+  "the row must be able to see its own harbour" stops being prose: a
+  cross-district requirement written into one agent's brief is a requirement
+  that agent cannot honour, so the corridor lists every district it crosses and
+  each of them gets the `why` verbatim.
+- **Landmark contracts.** Each district's `landmarks_citywide[]` is raycast to
+  from every vista that names it and from every waypoint of every district that
+  names it (a claim about "reading from the row" is a claim about standing in
+  the row). FAIL if no sample point sees it, WARN if fewer than half do. Before
+  this the field had no reader at all and was decoration.
+- **Interactions.** A district that declares `interactions[]` in the plan and
+  registers none FAILS. The first city built this way shipped ZERO
+  interactables and the runtime's whole KeyE system was dead code in a finished
+  town, because no brief asked for any.
+
+Plus one WARN that cannot be a FAIL: two districts with geometry over 0.5 m
+tall within 0.5 m of a shared envelope edge, overlapping along it for more than
+2 m, with no `boundary_features` entry declared there. A legitimate butt joint
+looks identical from geometry alone — only the plan can tell it from a double
+wall — but this points at the line and asks, which is what nothing did when the
+real double wall went in.

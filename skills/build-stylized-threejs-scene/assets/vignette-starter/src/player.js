@@ -2,18 +2,28 @@ import * as THREE from 'three';
 
 const EYE = 1.62;
 const RADIUS = 0.34;
+// The rise a walker may take in one step.  It is the flood fill's own limit, so
+// what the route gate calls reachable is exactly what a player can climb --
+// break that and a scene passes its gates while stranding whoever plays it.
+const STEP = 0.38;
 
 export class Walker {
-  constructor(camera, canvas, colliders) {
+  /**
+   * @param groundAt optional (x, z) -> height.  Without it the walker stays on
+   * y = 0, which is right for a flat vignette and wrong for anything terraced.
+   */
+  constructor(camera, canvas, colliders, { groundAt = null, spawn = [0, 0, 14] } = {}) {
     this.camera = camera;
     this.canvas = canvas;
     this.colliders = colliders;
-    this.spawn = new THREE.Vector3(0, 0, 14);
+    this.groundAt = groundAt;
+    this.spawn = new THREE.Vector3(spawn[0], groundAt ? groundAt(spawn[0], spawn[2]) : spawn[1], spawn[2]);
     this.position = this.spawn.clone();
     this.keys = new Set();
     this.yaw = 0;
     this.pitch = -0.04;
     this.velocity = new THREE.Vector3();
+    this.eyeY = this.position.y;
     this.forward = new THREE.Vector3();
     this.right = new THREE.Vector3();
     this.bind();
@@ -53,6 +63,25 @@ export class Walker {
     }
   }
 
+  /** Move one axis, then refuse the move if the ground there is a wall. */
+  stepAxis(axis, delta) {
+    if (!this.groundAt) {
+      this.position[axis] += delta;
+      this.resolve();
+      return;
+    }
+    const was = this.position[axis];
+    this.position[axis] += delta;
+    this.resolve();
+    const ground = this.groundAt(this.position.x, this.position.z);
+    if (ground - this.position.y > STEP) {
+      this.position[axis] = was;      // too high to step onto: it is a wall
+      this.resolve();
+      return;
+    }
+    this.position.y = ground;
+  }
+
   update(dt) {
     const active = document.pointerLockElement === this.canvas || document.activeElement === this.canvas;
     let forward = 0;
@@ -74,21 +103,23 @@ export class Walker {
     this.velocity.lerp(target, 1 - Math.exp(-12 * dt));
     const steps = Math.max(1, Math.ceil(this.velocity.length() * dt / 0.18));
     for (let i = 0; i < steps; i += 1) {
-      this.position.x += this.velocity.x * dt / steps;
-      this.resolve();
-      this.position.z += this.velocity.z * dt / steps;
-      this.resolve();
+      this.stepAxis('x', this.velocity.x * dt / steps);
+      this.stepAxis('z', this.velocity.z * dt / steps);
     }
+    // the eye catches up over ~50 ms so a flight of treads reads as a climb
+    // rather than as a stack of jolts
+    this.eyeY += (this.position.y - this.eyeY) * (1 - Math.exp(-20 * dt));
     this.applyCamera();
   }
 
   applyCamera() {
-    this.camera.position.set(this.position.x, this.position.y + EYE, this.position.z);
+    this.camera.position.set(this.position.x, this.eyeY + EYE, this.position.z);
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
   }
 
   reset() {
     this.position.copy(this.spawn);
+    this.eyeY = this.position.y;
     this.velocity.set(0, 0, 0);
     this.yaw = 0;
     this.pitch = -0.04;

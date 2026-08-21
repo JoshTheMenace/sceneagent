@@ -16,6 +16,17 @@ import * as THREE from 'three';
  *   (c) a 5x3 grid of rays through the frustum: if more than a third hit
  *       geometry within 1.2 m, the frame is blocked at the near plane.
  *
+ * (b) also polices CENTRING, which is why it returns warnings as well as
+ * failures.  "Inside the frustum" is a much weaker promise than "aimed at":
+ * a city vista shipped with its subject at ndc 0.90, hard against the frame
+ * edge, and a camera whose `target` pointed one way while its `subject` sat
+ * another passed every geometric test and then failed the district that had
+ * dutifully kept the corridor clear along the published aim.  So a subject
+ * past |ndc| 0.72 in either axis WARNS and past 0.95 FAILS.  Warnings are
+ * printed and returned; they do not change exit status, because a vista
+ * legitimately composed off-centre is a judgement call and a subject at the
+ * very edge is not.
+ *
  * Pure three.js math, no WebGL: runs in-page (window.__vignette.checkCamera)
  * and headless in Node (scripts/check-cameras.mjs).
  * ------------------------------------------------------------------ */
@@ -28,6 +39,11 @@ const GRID_X = [-1, -0.5, 0, 0.5, 1];
 const GRID_Y = [-0.66, 0, 0.66];
 const NEAR_BLOCK_M = 1.2;
 const SUBJECT_SLACK_M = 0.5;
+// |ndc| past this and the camera is not really aimed at its subject; past
+// the second it is not composing it at all.  0.72 is the outer third of the
+// frame, 0.95 is the frame edge with the subject's own bbox half over it.
+const AIM_WARN_NDC = 0.72;
+const AIM_FAIL_NDC = 0.95;
 
 export function createCameraCheck({ scene, cameras, colliders = [], footprintHeight = Infinity, aspect = 16 / 9 }) {
   const probe = new THREE.PerspectiveCamera(52, aspect, 0.05, 500);
@@ -49,9 +65,10 @@ export function createCameraCheck({ scene, cameras, colliders = [], footprintHei
   function checkCamera(name) {
     const view = cameras[name];
     if (!view) {
-      return { name, ok: false, failures: [`no review camera named "${name}" — have: ${Object.keys(cameras).join(', ')}`] };
+      return { name, ok: false, failures: [`no review camera named "${name}" — have: ${Object.keys(cameras).join(', ')}`], warnings: [] };
     }
     const failures = [];
+    const warnings = []; // printed and returned, never fatal
     const pos = new THREE.Vector3().fromArray(view.position);
     const target = new THREE.Vector3().fromArray(view.target);
     probe.fov = view.fov ?? 52;
@@ -94,13 +111,25 @@ export function createCameraCheck({ scene, cameras, colliders = [], footprintHei
               failures.push(`view of subject "${view.subject}" is blocked by "${label(hit.object)}" ${hit.distance.toFixed(2)} m from the camera (${slack.toFixed(2)} m short of the subject)`);
             }
           }
-          // aim sanity: project the subject's centre into NDC — a subject the
-          // ray can reach but the frustum does not contain is not in the frame
+          // aim: project the subject's centre into NDC.  "Inside the frustum"
+          // is not the promise — "aimed at" is.  A camera whose target points
+          // one way and whose subject sits another passes every geometric
+          // test here and then costs the district that kept the corridor
+          // clear along the published aim.
           const ndc = centre.clone().project(probe);
+          const where = `the camera looks at [${view.target.join(', ')}], the subject centres at [${centre.toArray().map((v) => v.toFixed(1)).join(', ')}]`;
+          const at = `ndc (${ndc.x.toFixed(2)}, ${ndc.y.toFixed(2)})`;
           if (ndc.z > 1) {
-            failures.push(`subject "${view.subject}" is BEHIND the camera — it looks at [${view.target.join(', ')}], the subject centres at [${centre.toArray().map((v) => v.toFixed(1)).join(', ')}]`);
-          } else if (Math.abs(ndc.x) > 1.05 || Math.abs(ndc.y) > 1.05) {
-            failures.push(`subject "${view.subject}" is outside the camera's frame (ndc ${ndc.x.toFixed(2)}, ${ndc.y.toFixed(2)}) — the camera looks at [${view.target.join(', ')}], the subject centres at [${centre.toArray().map((v) => v.toFixed(1)).join(', ')}]`);
+            failures.push(`subject "${view.subject}" is BEHIND the camera — ${where}`);
+          } else {
+            const off = Math.max(Math.abs(ndc.x), Math.abs(ndc.y));
+            if (off > AIM_FAIL_NDC) {
+              failures.push(`subject "${view.subject}" is at the frame edge or outside it — ${at}, limit ${AIM_FAIL_NDC}. ` +
+                `This camera is not composing its subject: ${where}. Derive the target from the subject.`);
+            } else if (off > AIM_WARN_NDC) {
+              warnings.push(`subject "${view.subject}" sits in the outer third of the frame — ${at}, warn past ${AIM_WARN_NDC}. ` +
+                `The camera is not really aimed at its subject: ${where}.`);
+            }
           }
         }
       }
@@ -121,17 +150,24 @@ export function createCameraCheck({ scene, cameras, colliders = [], footprintHei
       failures.push(`${blocked}/${total} frustum rays hit geometry within ${NEAR_BLOCK_M} m — the frame is blocked at the near plane`);
     }
 
-    return { name, ok: failures.length === 0, failures };
+    return { name, ok: failures.length === 0, failures, warnings };
   }
 
   function checkAllCameras() {
     const results = Object.keys(cameras).map(checkCamera);
     const ok = results.every((r) => r.ok);
+    const warnings = results.flatMap((r) => (r.warnings ?? []).map((w) => `${r.name}: ${w}`));
     return {
       ok,
+      warnings,
       cameras: results,
+      // WARN lines print with the camera they belong to and do NOT move the
+      // verdict -- an off-centre vista may be a composition, an edge one is
+      // never a contract that can be honoured
       report: results
-        .map((r) => `${r.ok ? 'PASS' : 'FAIL'} ${r.name}${r.failures.map((f) => `\n  - ${f}`).join('')}`)
+        .map((r) => `${r.ok ? 'PASS' : 'FAIL'} ${r.name}` +
+          r.failures.map((f) => `\n  - ${f}`).join('') +
+          (r.warnings ?? []).map((w) => `\n  WARN ${w}`).join(''))
         .join('\n'),
     };
   }

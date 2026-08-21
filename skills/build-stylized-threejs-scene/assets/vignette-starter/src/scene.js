@@ -64,6 +64,7 @@ export function buildVignette(scene) {
 
   return {
     root,
+    groundAt: (x, z) => ctx.groundAt(x, z),
     colliders: ctx.colliders,
     interactables: ctx.interactables,
     update: (dt) => ctx.step(dt),

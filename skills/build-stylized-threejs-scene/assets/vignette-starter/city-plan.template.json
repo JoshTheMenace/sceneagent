@@ -3,12 +3,27 @@
   "city": {
     "name": "Replace with the city's name",
     "promise": "Replace with one sentence: place, era, hour, weather, and what a visitor discovers",
-    "footprint_m": [120, 80],
-    "palette_notes": "Describe the city-wide palette roles: value ladder, shade tint, the one or two saturated accents and who owns them"
+    "footprint_m": [
+      120,
+      80
+    ],
+    "palette_notes": "Describe the city-wide palette roles: value ladder, shade tint, the one or two saturated accents and who owns them",
+    "compass": {
+      "north_xz": [
+        0,
+        -1
+      ],
+      "$comment": "Unit vector in (x, z) pointing north. EVERY compass word in this plan resolves against it, and the light rig is derived from it \u2014 do not hand-place the sun."
+    },
+    "sun": {
+      "bearing": "south-east",
+      "elevation_deg": 22,
+      "$comment": "Resolved against compass.north_xz into the scene's directional light. Low elevation = long rakes and a first/last-light read."
+    }
   },
   "shared_kit": {
     "module": "src/kit/",
-    "$comment": "Built BEFORE any district by the kit stage. Districts import generators from here only — no district may define its own building generator.",
+    "$comment": "Built BEFORE any district by the kit stage. Districts import generators from here only \u2014 no district may define its own building generator.",
     "builders_required": [
       "Name the building/prop generators every district will need, e.g. rowhouse, warehouse, quaycrane"
     ],
@@ -21,13 +36,21 @@
       "id": "district-id-kebab",
       "name": "Replace with the district's name",
       "brief": "Replace with 2-4 sentences of narrative intent: who lives/works here, what happened ten minutes ago, what the player should feel crossing it",
-      "envelope": { "x0": -60, "z0": -40, "x1": 0, "z1": 0 },
+      "envelope": {
+        "x0": -60,
+        "z0": -40,
+        "x1": 0,
+        "z1": 0
+      },
       "after": [],
       "sockets": [
         {
           "id": "socket-id",
           "kind": "road",
-          "at": [0, -20],
+          "at": [
+            0,
+            -20
+          ],
           "axis": "x",
           "width": 6,
           "y": 0.0,
@@ -35,22 +58,135 @@
         }
       ],
       "anchors": [
-        { "x": -30, "z": -20, "expect_top": 0.0, "tol": 0.05 }
+        {
+          "x": -30,
+          "z": -20,
+          "expect_top": 0.0,
+          "tol": 0.05
+        }
       ],
       "waypoints": [
-        { "name": "Name a place a player must be able to reach", "x": -30, "z": -20 }
+        {
+          "name": "Name a place a player must be able to reach",
+          "x": -30,
+          "z": -20
+        }
       ],
-      "landmarks_citywide": [],
-      "budgets": { "max_meshes": 150, "max_triangles": 80000 }
+      "landmarks_citywide": [
+        {
+          "object": "district:district-id-kebab:object-name",
+          "must_read_from_vistas": [
+            "vista-name"
+          ],
+          "must_read_from_districts": [
+            "district-id-kebab"
+          ],
+          "$comment": "check-city raycasts to this object from each named vista AND from sample points in each named district. A landmark nobody can check is decoration."
+        }
+      ],
+      "budgets": {
+        "max_meshes": 400,
+        "max_triangles": 150000,
+        "$comment": "MESHES are the binding constraint, not triangles \u2014 measured: a kit building pools to 10-18 meshes, so 7 buildings plus dressing is ~220 and a district that has to furnish a street wants ~400. Triangles typically land near 15% of this allowance."
+      },
+      "interactions": [
+        {
+          "name": "Name the one thing a player can do here",
+          "at": [
+            0,
+            0
+          ],
+          "$comment": "Each district contributes at least one. The first city built this way shipped ZERO interactables city-wide and the whole KeyE system was dead code, because no brief asked for any. check-city FAILS a district that declares one here and registers none."
+        }
+      ],
+      "massing": [
+        {
+          "x": -30,
+          "z": -20,
+          "w": 10,
+          "d": 8,
+          "h": 7,
+          "$comment": "Rough blocks the coordinator sketches: the right mass at the right height, nothing more. `composeCity({ only: '<other-district>' })` stands these up so an agent building ALONE composes its edges against something. Measured, edges-against-nothing is where decomposition loses its composition score, identically in every district, and it is the one loss that does not shrink as districts are added. Ignored entirely when every district is present."
+        }
+      ]
     }
   ],
   "vista_cameras": [
     {
       "name": "vista-name",
-      "position": [0, 24, 60],
-      "target": [0, 4, 0],
+      "position": [
+        0,
+        24,
+        60
+      ],
+      "target": [
+        0,
+        4,
+        0
+      ],
       "fov": 50,
       "subject": "Name the Object3D this vista exists to show"
+    }
+  ],
+  "surrounds": {
+    "owner": "district-id-kebab",
+    "$comment": "Everything inside footprint_m but outside every envelope \u2014 sea, moor, backdrop, sky edge. Someone MUST own it: unowned negative space is how a town ends in a visible cut. The validator fails a plan whose surrounds owner is not a real district."
+  },
+  "boundary_features": [
+    {
+      "id": "feature-id-kebab",
+      "kind": "retaining-wall",
+      "owner": "district-id-kebab",
+      "mate": "the-other-district-id",
+      "along": "z",
+      "at": 0,
+      "from": -10,
+      "to": 10,
+      "$comment": "A wall, kerb, railing or revetment ON a shared boundary. Exactly one district builds it; the mate butts to it and builds nothing there. Both building it is a double wall; neither is a gap."
+    }
+  ],
+  "terrain": {
+    "module": "src/terrain.js",
+    "owner": "coordinator",
+    "$comment": "ONE continuous ground surface over the whole footprint INCLUDING surrounds, built before any district and never by a district. Districts DRESS it \u2014 pads, kerbs, steps, revetments laid ON it \u2014 and never platform their own rectangle. A district that lays its own ground plate ends it at its own envelope, which is how a town gets floating slabs, severed headlands and voids behind walls: nobody can fix that from inside a parcel.",
+    "levels": [
+      {
+        "id": "district-id-kebab",
+        "y": 0.0
+      }
+    ],
+    "crossings": [
+      {
+        "socket": "socket-id",
+        "kind": "stairs",
+        "$comment": "The terrain module builds BOTH halves of every socket crossing, so the two sides cannot disagree. One entry per socket PAIR, named from either end. kind: ramp | road | path | stairs. Optional: `grade` (ramps, default 1/8), `going` and `rise` (stairs; going is clamped to 0.36 m because the route gate strides 0.35 and would otherwise cross two treads in one step and call a good flight unclimbable)."
+      }
+    ],
+    "surrounds": {
+      "kind": "water",
+      "blend_m": 10,
+      "$comment": "How the ground reads beyond every envelope: water | moor | flat | sand | scrub. `blend_m` is how far the nearest district levels take to die into it. `water_y` / `y` override the water line and the bed; `roughness_m` the scatter. This is the half of the ground no district could ever have built."
+    },
+    "cell_m": 2.0
+  },
+  "sight_corridors": [
+    {
+      "id": "corridor-id-kebab",
+      "from": [
+        0,
+        0
+      ],
+      "to": [
+        0,
+        -20
+      ],
+      "half_width": 3,
+      "min_clear_h": 4.0,
+      "districts": [
+        "district-a",
+        "district-b"
+      ],
+      "why": "Say what this corridor exists to let the player see. EVERY district it crosses gets this verbatim in its brief \u2014 a requirement one agent cannot honour alone belongs to all of them."
     }
   ]
 }

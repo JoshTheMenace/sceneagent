@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildVignette } from './scene.js';
 import { Walker } from './player.js';
+import { sunPosition, fillPosition, shadowRadius } from './core/sunrig.js';
 import { PAL } from './palette.js';
 import { Pipeline } from './core/post.js';
 import { shadowTintActive } from './core/toon.js';
@@ -85,7 +86,12 @@ scene.add(hemi);
 
 /* --------------------------------- world --------------------------------- */
 const vignette = buildVignette(scene);
-const player = new Walker(camera, canvas, vignette.colliders);
+// groundAt makes the walker ride terraces and stairs; a scene that does not
+// export one keeps the old flat behaviour.
+const player = new Walker(camera, canvas, vignette.colliders, {
+  groundAt: vignette.groundAt ?? null,
+  spawn: vignette.spawn ?? [0, 0, 14],
+});
 
 const pipeline = new Pipeline(renderer, scene, camera, {
   ink: { color: PAL.ink, fadeStart: 30, fadeEnd: 80, skyDepth: 105 },
@@ -101,6 +107,19 @@ const camcheck = createCameraCheck({
 
 const raycaster = new THREE.Raycaster();
 raycaster.far = 3;
+// A city plan owns the compass and the sun; derive the rig from it rather
+// than leaving a hand-placed light to contradict the plan's own prose.
+if (vignette.plan?.city?.compass) {
+  const spec = vignette.plan.city;
+  sun.position.fromArray(sunPosition(spec));
+  fill.position.fromArray(fillPosition(spec));
+  const r = shadowRadius(spec.footprint_m);
+  sun.shadow.camera.left = -r; sun.shadow.camera.right = r;
+  sun.shadow.camera.top = r;   sun.shadow.camera.bottom = -r;
+  sun.shadow.camera.far = Math.max(160, r * 4);
+  sun.shadow.camera.updateProjectionMatrix();
+}
+
 const hitboxes = vignette.interactables.map((entry) => entry.hitbox);
 const reviewName = new URLSearchParams(location.search).get('review');
 const reviewView = reviewName ? vignette.reviewCameras[reviewName] : null;
